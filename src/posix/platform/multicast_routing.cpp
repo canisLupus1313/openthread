@@ -128,8 +128,7 @@ void MulticastRoutingManager::Remove(const Ip6::Address &aAddress)
 
     VerifyOrExit(IsEnabled());
 
-    RemoveInboundMulticastForwardingCache(aAddress);
-    UpdateMldReport(aAddress, false);
+    RemoveInboundMulticastForwardingCache(aAddress);;
 
     otLogResultPlat(error, "MulticastRoutingManager: %s: %s", __FUNCTION__, aAddress.ToString().AsCString());
 
@@ -370,7 +369,6 @@ void MulticastRoutingManager::RemoveInboundMulticastForwardingCache(const Ip6::A
     {
         if (mfc.IsValid() && mfc.mIif == kMifIndexBackbone && mfc.mGroupAddr == aGroupAddr)
         {
-            UpdateMldReport(mfc.mGroupAddr, false);
             RemoveMulticastForwardingCache(mfc);
         }
     }
@@ -395,7 +393,6 @@ void MulticastRoutingManager::ExpireMulticastForwardingCache(void)
         {
             if (!UpdateMulticastRouteInfo(mfc))
             {
-                UpdateMldReport(mfc.mGroupAddr, false);
                 // The multicast route is expired
                 RemoveMulticastForwardingCache(mfc);
             }
@@ -561,7 +558,6 @@ void MulticastRoutingManager::SaveMulticastForwardingCache(const Ip6::Address & 
     }
     else
     {
-        UpdateMldReport(oldest->mGroupAddr, false);
         RemoveMulticastForwardingCache(*oldest);
         oldest->Set(aSrcAddr, aGroupAddr, aIif, aOif);
     }
@@ -584,6 +580,8 @@ void MulticastRoutingManager::RemoveMulticastForwardingCache(
            sizeof(mf6cctl.mf6cc_mcastgrp.sin6_addr.s6_addr));
 
     mf6cctl.mf6cc_parent = aMfc.mIif;
+
+    UpdateMldReport(aMfc.mGroupAddr, false);
 
     error = (0 == setsockopt(mMulticastRouterSock, IPPROTO_IPV6, MRT6_DEL_MFC, &mf6cctl, sizeof(mf6cctl)))
                 ? OT_ERROR_NONE
