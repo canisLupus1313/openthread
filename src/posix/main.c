@@ -375,7 +375,7 @@ int main(int argc, char *argv[])
     {
         alarm(0);
 #if OPENTHREAD_ENABLE_COVERAGE
-        __gcov_flush();
+        //__gcov_flush();
 #endif
         execvp(argv[0], argv);
     }

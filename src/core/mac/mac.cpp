@@ -1562,12 +1562,13 @@ Error Mac::ProcessReceiveSecurity(RxFrame &aFrame, const Address &aSrcAddr, Neig
     const ExtAddress * extAddress;
 
     VerifyOrExit(aFrame.GetSecurityEnabled(), error = kErrorNone);
+    otLogInfoMac("Rx security Line: %d", __LINE__);
 
     IgnoreError(aFrame.GetSecurityLevel(securityLevel));
     VerifyOrExit(securityLevel == Frame::kSecEncMic32);
 
     IgnoreError(aFrame.GetFrameCounter(frameCounter));
-    otLogDebgMac("Rx security - frame counter %u", frameCounter);
+    otLogInfoMac("Rx security - frame counter %u", frameCounter);
 
     IgnoreError(aFrame.GetKeyIdMode(keyIdMode));
 
@@ -1581,6 +1582,7 @@ Error Mac::ProcessReceiveSecurity(RxFrame &aFrame, const Address &aSrcAddr, Neig
     case Frame::kKeyIdMode1:
         VerifyOrExit(aNeighbor != nullptr);
 
+        otLogInfoMac("Rx security Line: %d", __LINE__);
         IgnoreError(aFrame.GetKeyId(keyid));
         keyid--;
 
@@ -1611,6 +1613,7 @@ Error Mac::ProcessReceiveSecurity(RxFrame &aFrame, const Address &aSrcAddr, Neig
 
         if (aNeighbor->IsStateValid())
         {
+            otLogInfoMac("Rx security Line: %d", __LINE__);
             VerifyOrExit(keySequence >= aNeighbor->GetKeySequence());
 
             if (keySequence == aNeighbor->GetKeySequence())
@@ -1624,8 +1627,10 @@ Error Mac::ProcessReceiveSecurity(RxFrame &aFrame, const Address &aSrcAddr, Neig
 #endif
 
                 // If frame counter is one off, then frame is a duplicate.
+                otLogInfoMac("Rx security Line: %d", __LINE__);
                 VerifyOrExit((frameCounter + 1) != neighborFrameCounter, error = kErrorDuplicated);
 
+                otLogInfoMac("Rx security Line: %d", __LINE__);
                 VerifyOrExit(frameCounter >= neighborFrameCounter);
             }
         }
@@ -1642,7 +1647,7 @@ Error Mac::ProcessReceiveSecurity(RxFrame &aFrame, const Address &aSrcAddr, Neig
     default:
         ExitNow();
     }
-
+    otLogInfoMac("Rx security Line: %d", __LINE__);
     SuccessOrExit(aFrame.ProcessReceiveAesCcm(*extAddress, *macKey));
 
     if ((keyIdMode == Frame::kKeyIdMode1) && aNeighbor->IsStateValid())
@@ -1678,6 +1683,7 @@ Error Mac::ProcessReceiveSecurity(RxFrame &aFrame, const Address &aSrcAddr, Neig
     }
 
     error = kErrorNone;
+    otLogInfoMac("Rx security Line: %d", __LINE__);
 
 exit:
     return error;
