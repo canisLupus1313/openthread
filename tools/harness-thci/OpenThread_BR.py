@@ -357,15 +357,22 @@ class OpenThread_BR(OpenThreadTHCI, IThci):
         self.bash(cmd)
 
     @API
-    def setupHost(self, setDp=False, setDua=False):
+    def setupHost(self, setDp=False, setDua=True, setGua=False, is_enable='on'):
         self.IsHost = True
 
         self.bash('ip -6 addr add 910b::1 dev %s' % self.backboneNetif)
 
         if setDua:
             self.bash('ip -6 addr add fd00:7d03:7d03:7d03::1 dev %s' % self.backboneNetif)
+        if setGua:
+            self.bash('ip -6 addr add 2000:0000:0000:0001::1 dev %s' % self.backboneNetif)
 
-        self.__startRadvdService(setDp)
+        self.__startRadvdService(setGua,
+                                 radvd_config_string='sudo sh -c \'printf \"interface eth0\\n{\\nAdvSendAdvert '
+                                 'on;\\nMaxRtrAdvInterval 20;\\nMinRtrAdvInterval '
+                                 '3;\\nAdvDefaultPreference low;\\nprefix '
+                                 '2001:0dba:3100:7ae0::/64\\n{\\nAdvOnLink on;\\nAdvAutonomous '
+                                 '%s;\\nAdvRouterAddr off;\\n};\\n};\\n\" > \/etc\/radvd.conf\'' % is_enable)
 
     def _deviceEscapeEscapable(self, string):
         """Escape CLI escapable characters in the given string.
@@ -435,7 +442,7 @@ class OpenThread_BR(OpenThreadTHCI, IThci):
         return ret
 
     @API
-    def ping(self, strDestination, ilength=0, hop_limit=5, timeout=5):
+    def ping(self, strDestination, ilength=0, hop_limit=5, timeout=5, src_addr_type=''):
         """ send ICMPv6 echo request with a given length to a unicast destination
             address
 
@@ -452,8 +459,12 @@ class OpenThread_BR(OpenThreadTHCI, IThci):
             ifName = self.backboneNetif
         else:
             ifName = 'wpan0'
-
-        cmd = 'ping -6 -I %s %s -c 1 -s %d -W %d -t %d' % (
+        #_src_addr = ifName
+        if src_addr_type != '':
+            _src_addr = src_addr_type + '%%%s' % self.backboneNetif
+            ifName = ''
+        cmd = 'ping -6 -I %s %s %s -c 1 -s %d -W %d -t %d' % (
+            _src_addr,
             ifName,
             strDestination,
             int(ilength),
@@ -560,39 +571,39 @@ class OpenThread_BR(OpenThreadTHCI, IThci):
         self.__syslog_skip_lines = None
 
     @watched
-    def __startRadvdService(self, setDp=False):
+    def __startRadvdService(self, setGua, radvd_config_string):
         assert self.IsHost, "radvd service runs on Host only"
+        if setGua != True:
+            self.bash('sudo sh -c \"echo \\"interface eth0 \\" > /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \"{\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"AdvSendAdvert off;\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \"\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"    MaxRtrAdvInterval 20;\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"    MinRtrAdvInterval 3;\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"    AdvDefaultPreference low;\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"    prefix 910b::/64\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"    {\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"        AdvOnLink on;\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"        AdvAutonomous on;\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"        AdvRouterAddr on;\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"    };\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"    prefix fd00:7d03:7d03:7d03::/64\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"    {\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"        AdvOnLink on;\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"        AdvAutonomous on;\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"        AdvRouterAddr on;\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"    };\\" >> /etc/radvd.conf\"')
+            self.bash('sudo sh -c \"echo \\"};\\" >> /etc/radvd.conf\"')
 
-        conf = "EOF"
-        conf += "\ninterface %s" % self.backboneNetif
-        conf += "\n{"
-        conf += "\n    AdvSendAdvert on;"
-        conf += "\n"
-        conf += "\n    MinRtrAdvInterval 3;"
-        conf += "\n    MaxRtrAdvInterval 30;"
-        conf += "\n    AdvDefaultPreference low;"
-        conf += "\n"
-        conf += "\n    prefix 910b::/64"
-        conf += "\n    {"
-        conf += "\n        AdvOnLink on;"
-        conf += "\n        AdvAutonomous on;"
-        conf += "\n        AdvRouterAddr on;"
-        conf += "\n    };"
-        if setDp:
-            conf += "\n"
-            conf += "\n    prefix fd00:7d03:7d03:7d03::/64"
-            conf += "\n    {"
-            conf += "\n        AdvOnLink on;"
-            conf += "\n        AdvAutonomous off;"
-            conf += "\n        AdvRouterAddr off;"
-            conf += "\n    };"
-        conf += "\n};"
-        conf += "\nEOF"
-        cmd = 'sh -c "cat >/etc/radvd.conf <<%s"' % conf
+            #self.bash('sudo service radvd stop')
+            self.bash('sudo service radvd restart')
+            #self.bash('sudo service radvd status')
+        else:
+            self.bash('%s' % radvd_config_string)
 
-        self.bash(cmd)
-        self.bash(self.extraParams.get('cmd-restart-radvd', 'service radvd restart'))
-        self.bash('service radvd status')
+            self.bash('sudo service radvd restart')
 
     @watched
     def __stopRadvdService(self):
@@ -642,10 +653,59 @@ class OpenThread_BR(OpenThreadTHCI, IThci):
             self.log('%s', line)
 
     @API
+    def clear_answer_records(self):
+        self.bash('sudo systemctl restart mdns.service')
+        #self.bash('sudo /etc/init.d/mdns restart')
+        #self.bash('sudo service avahi-daemon restart')
+
+    @API
+    def mdns_query_instance(self, ip_addr, service_name):
+        self.bash(' timeout 2s dns-sd -P %s _thread-test._udp "" 53 host-test-1.default.service.arpa %s' %
+                  (service_name, ip_addr))
+
+    @API
+    def mdns_tcp_query_instance(self, ip_addr, service_name):
+        self.bash('timeout 2s dns-sd -P %s _thread-test._tcp "" 53 host-test-1.default.service.arpa %s' %
+                  (service_name, ip_addr))
+
+    @API
     def get_eth_addrs(self):
         cmd = "ip -6 addr list dev %s | grep 'inet6 ' | awk '{print $2}'" % self.backboneNetif
         addrs = self.bash(cmd)
         return [addr.split('/')[0] for addr in addrs]
+
+    def srp_disable(self):
+        self.bash('sudo ot-ctl srp server disable')
+
+    def srp_enable(self):
+        self.bash('sudo ot-ctl srp server enable')
+
+    def set_server_lease(self, lease_min='1800', lease_max='7200', key_lease_min='86400', key_lease_max='1209600'):
+        self.bash('sudo ot-ctl srp server lease %s %s %s %s' % (lease_min, lease_max, key_lease_min, key_lease_max))
+
+    def add_meshlocal_prefix(self, meshlocalprefix):
+        self.bash('sudo ot-ctl prefix meshlocal %s' % meshlocalprefix)
+
+    def get_onlink_prefix(self):
+        onlink_prefix = self.bash('sudo ot-ctl br onlinkprefix')
+        return onlink_prefix
+
+    def set_unicast_dataset(self):
+        ml_eid_addr = self.bash('sudo ot-ctl ipaddr mleid')[0]
+        ml_eid_addr = ModuleHelper.GetFullIpv6Address(ml_eid_addr)
+        ml_eid_addr = ml_eid_addr.replace(':', '')
+        rloc_addr = self.bash('sudo ot-ctl rloc16')[0]
+        self.bash('sudo ot-ctl srp server disable')
+        self.bash('sudo ot-ctl srp server addrmode unicast')
+        self.bash('sudo ot-ctl service add 44970 5d%s0053 %s' % (ml_eid_addr, rloc_addr))
+        self.bash('sudo ot-ctl netdata register')
+        self.bash('sudo ot-ctl srp server enable')
+
+    def set_anycast_dataset(self):
+        self.bash('sudo ot-ctl srp server disable')
+        self.bash('sudo ot-ctl srp server addrmode anycast')
+        self.bash('sudo ot-ctl srp server seqnum 123')
+        self.bash('sudo ot-ctl srp server enable')
 
     @API
     def mdns_query(self, service='_meshcop._udp.local', addrs_allowlist=(), addrs_denylist=()):
@@ -758,3 +818,14 @@ class OpenThread_BR(OpenThreadTHCI, IThci):
             lastNetData = curNetData
 
         return lastNetData
+
+    def get_ip_port(self):
+        cmd = 'sudo ot-ctl ipaddr mleid'
+        server_ip = self.bash(cmd)
+        ipaddr = ipaddress.ip_address(unicode((server_ip[0])))
+        ipaddr = str(ipaddr.exploded)
+        return ipaddr
+
+    def config_prefix_length(self, addr):
+        omr_addr = addr + '/0'
+        self.bash('sudo ot-ctl route add %s' % omr_addr)
