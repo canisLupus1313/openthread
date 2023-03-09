@@ -35,6 +35,9 @@
 
 #include <stdio.h>
 #include <sys/time.h>
+#ifdef OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
+#include <openthread/platform/ble.h>
+#endif
 
 enum
 {
@@ -622,5 +625,54 @@ void otPlatDnsCancelUpstreamQuery(otInstance *aInstance, otPlatDnsUpstreamQuery 
     otPlatDnsUpstreamQueryDone(aInstance, aTxn, nullptr);
 }
 #endif
+
+#ifdef OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
+otError otPlatBleEnable(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    return OT_ERROR_NOT_IMPLEMENTED;
+}
+
+otError otPlatBleDisable(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    return OT_ERROR_NOT_IMPLEMENTED;
+}
+
+otError otPlatBleGapAdvStart(otInstance *aInstance, uint16_t aInterval, uint8_t aType)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aInterval);
+    OT_UNUSED_VARIABLE(aType);
+    return OT_ERROR_NOT_IMPLEMENTED;
+}
+
+otError otPlatBleGapAdvStop(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    return OT_ERROR_NOT_IMPLEMENTED;
+}
+
+otError otPlatBleGapDisconnect(otInstance *aInstance)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    return OT_ERROR_NOT_IMPLEMENTED;
+}
+
+otError otPlatBleGattMtuGet(otInstance *aInstance, uint16_t *aMtu)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aMtu);
+    return OT_ERROR_NOT_IMPLEMENTED;
+}
+
+otError otPlatBleGattServerIndicate(otInstance *aInstance, uint16_t aHandle, otBleRadioPacket *aPacket)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+    OT_UNUSED_VARIABLE(aHandle);
+    OT_UNUSED_VARIABLE(aPacket);
+    return OT_ERROR_NOT_IMPLEMENTED;
+}
+#endif // OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
 
 } // extern "C"

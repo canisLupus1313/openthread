@@ -73,7 +73,7 @@ const int Dtls::sHashes[] = {MBEDTLS_MD_SHA256, MBEDTLS_MD_NONE};
 #endif
 #endif
 
-Dtls::Dtls(Instance &aInstance, bool aLayerTwoSecurity)
+Dtls::Dtls(Instance &aInstance, bool aLayerTwoSecurity, bool aDatagramTransport)
     : InstanceLocator(aInstance)
     , mState(kStateClosed)
     , mPskLength(0)
@@ -82,12 +82,15 @@ Dtls::Dtls(Instance &aInstance, bool aLayerTwoSecurity)
     , mTimerIntermediate(0)
     , mTimerSet(false)
     , mLayerTwoSecurity(aLayerTwoSecurity)
+    , mDatagramTransport(aDatagramTransport)
     , mReceiveMessage(nullptr)
+    , mContext(nullptr)
     , mSocket(aInstance)
+    , mTransportContext(nullptr)
     , mMessageSubType(Message::kSubTypeNone)
     , mMessageDefaultSubType(Message::kSubTypeNone)
 {
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
 #ifdef MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
     mPreSharedKey         = nullptr;
     mPreSharedKeyIdentity = nullptr;
@@ -121,9 +124,12 @@ Dtls::Dtls(Instance &aInstance, bool aLayerTwoSecurity)
 void Dtls::FreeMbedtls(void)
 {
 #if defined(MBEDTLS_SSL_SRV_C) && defined(MBEDTLS_SSL_COOKIE_C)
-    mbedtls_ssl_cookie_free(&mCookieCtx);
+    if (mDatagramTransport)
+    {
+        mbedtls_ssl_cookie_free(&mCookieCtx);
+    }
 #endif
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
 #ifdef MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
     mbedtls_x509_crt_free(&mCaChain);
     mbedtls_x509_crt_free(&mOwnCert);
@@ -144,7 +150,8 @@ Error Dtls::Open(ReceiveHandler aReceiveHandler, ConnectedHandler aConnectedHand
 
     mConnectedCallback.Set(aConnectedHandler, aContext);
     mReceiveCallback.Set(aReceiveHandler, aContext);
-    mState = kStateOpen;
+    mContext = aContext;
+    mState   = kStateOpen;
 
 exit:
     return error;
@@ -178,11 +185,17 @@ void Dtls::HandleUdpReceive(Message &aMessage, const Ip6::MessageInfo &aMessageI
         ExitNow();
 
     case Dtls::kStateOpen:
+        IgnoreError(mSocket.Connect(Ip6::SockAddr(aMessageInfo.GetPeerAddr(), aMessageInfo.GetPeerPort())));
+
         mMessageInfo.SetPeerAddr(aMessageInfo.GetPeerAddr());
         mMessageInfo.SetPeerPort(aMessageInfo.GetPeerPort());
         mMessageInfo.SetIsHostInterface(aMessageInfo.IsHostInterface());
 
-        mMessageInfo.SetSockAddr(aMessageInfo.GetSockAddr());
+        if (Get<ThreadNetif>().HasUnicastAddress(aMessageInfo.GetSockAddr()))
+        {
+            mMessageInfo.SetSockAddr(aMessageInfo.GetSockAddr());
+        }
+
         mMessageInfo.SetSockPort(aMessageInfo.GetSockPort());
 
         SuccessOrExit(Setup(false));
@@ -232,6 +245,7 @@ Error Dtls::Bind(TransportCallback aCallback, void *aContext)
     VerifyOrExit(!mTransportCallback.IsSet(), error = kErrorAlready);
 
     mTransportCallback.Set(aCallback, aContext);
+    mTransportContext = aContext;
 
 exit:
     return error;
@@ -248,7 +262,7 @@ Error Dtls::Setup(bool aClient)
 
     mbedtls_ssl_init(&mSsl);
     mbedtls_ssl_config_init(&mConf);
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
 #ifdef MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
     mbedtls_x509_crt_init(&mCaChain);
     mbedtls_x509_crt_init(&mOwnCert);
@@ -256,15 +270,20 @@ Error Dtls::Setup(bool aClient)
 #endif
 #endif
 #if defined(MBEDTLS_SSL_SRV_C) && defined(MBEDTLS_SSL_COOKIE_C)
-    mbedtls_ssl_cookie_init(&mCookieCtx);
+    if (mDatagramTransport)
+    {
+        mbedtls_ssl_cookie_init(&mCookieCtx);
+    }
 #endif
 
-    rval = mbedtls_ssl_config_defaults(&mConf, aClient ? MBEDTLS_SSL_IS_CLIENT : MBEDTLS_SSL_IS_SERVER,
-                                       MBEDTLS_SSL_TRANSPORT_DATAGRAM, MBEDTLS_SSL_PRESET_DEFAULT);
+    rval = mbedtls_ssl_config_defaults(
+        &mConf, aClient ? MBEDTLS_SSL_IS_CLIENT : MBEDTLS_SSL_IS_SERVER,
+        mDatagramTransport ? MBEDTLS_SSL_TRANSPORT_DATAGRAM : MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT);
     VerifyOrExit(rval == 0);
 
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
-    if (mVerifyPeerCertificate && mCipherSuites[0] == MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8)
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
+    if (mVerifyPeerCertificate && (mCipherSuites[0] == MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8 ||
+                                   mCipherSuites[0] == MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256))
     {
         mbedtls_ssl_conf_authmode(&mConf, MBEDTLS_SSL_VERIFY_REQUIRED);
     }
@@ -313,7 +332,7 @@ Error Dtls::Setup(bool aClient)
     mbedtls_ssl_conf_dbg(&mConf, HandleMbedtlsDebug, this);
 
 #if defined(MBEDTLS_SSL_SRV_C) && defined(MBEDTLS_SSL_COOKIE_C)
-    if (!aClient)
+    if (!aClient && mDatagramTransport)
     {
         rval = mbedtls_ssl_cookie_setup(&mCookieCtx, Crypto::MbedTls::CryptoSecurePrng, nullptr);
         VerifyOrExit(rval == 0);
@@ -326,16 +345,20 @@ Error Dtls::Setup(bool aClient)
     VerifyOrExit(rval == 0);
 
     mbedtls_ssl_set_bio(&mSsl, this, &Dtls::HandleMbedtlsTransmit, HandleMbedtlsReceive, nullptr);
-    mbedtls_ssl_set_timer_cb(&mSsl, this, &Dtls::HandleMbedtlsSetTimer, HandleMbedtlsGetTimer);
+
+    if (mDatagramTransport)
+    {
+        mbedtls_ssl_set_timer_cb(&mSsl, this, &Dtls::HandleMbedtlsSetTimer, HandleMbedtlsGetTimer);
+    }
 
     if (mCipherSuites[0] == MBEDTLS_TLS_ECJPAKE_WITH_AES_128_CCM_8)
     {
         rval = mbedtls_ssl_set_hs_ecjpake_password(&mSsl, mPsk, mPskLength);
     }
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
     else
     {
-        rval = SetApplicationCoapSecureKeys();
+        rval = SetApplicationSecureKeys();
     }
 #endif
     VerifyOrExit(rval == 0);
@@ -348,10 +371,10 @@ Error Dtls::Setup(bool aClient)
     {
         LogInfo("DTLS started");
     }
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
     else
     {
-        LogInfo("Application Coap Secure DTLS started");
+        LogInfo("Application Secure (D)TLS started");
     }
 #endif
 
@@ -369,14 +392,16 @@ exit:
     return Crypto::MbedTls::MapError(rval);
 }
 
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
-int Dtls::SetApplicationCoapSecureKeys(void)
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
+int Dtls::SetApplicationSecureKeys(void)
 {
     int rval = 0;
 
     switch (mCipherSuites[0])
     {
     case MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8:
+    case MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
+
 #ifdef MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
         if (mCaChainSrc != nullptr)
         {
@@ -426,14 +451,15 @@ exit:
     return rval;
 }
 
-#endif // OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#endif // OPENTHREAD_CONFIG_TLS_API_ENABLE
 
 void Dtls::Close(void)
 {
     Disconnect();
 
-    mState    = kStateClosed;
-    mTimerSet = false;
+    mState            = kStateClosed;
+    mTransportContext = nullptr;
+    mTimerSet         = false;
     mTransportCallback.Clear();
 
     IgnoreError(mSocket.Close());
@@ -472,7 +498,7 @@ exit:
     return error;
 }
 
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
 #ifdef MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
 
 void Dtls::SetCertificate(const uint8_t *aX509Certificate,
@@ -491,7 +517,15 @@ void Dtls::SetCertificate(const uint8_t *aX509Certificate,
     mPrivateKeySrc    = aPrivateKey;
     mPrivateKeyLength = aPrivateKeyLength;
 
-    mCipherSuites[0] = MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8;
+    if (mDatagramTransport)
+    {
+        mCipherSuites[0] = MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_CCM_8;
+    }
+    else
+    {
+        mCipherSuites[0] = MBEDTLS_TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;
+    }
+
     mCipherSuites[1] = 0;
 }
 
@@ -550,7 +584,163 @@ exit:
 }
 #endif // defined(MBEDTLS_BASE64_C) && defined(MBEDTLS_SSL_KEEP_PEER_CERTIFICATE)
 
-#endif // OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if defined(MBEDTLS_SSL_KEEP_PEER_CERTIFICATE)
+Error Dtls::GetPeerSubjectAttributeByOid(const char    *aOid,
+                                         size_t         aOidLength,
+                                         unsigned char *aAttributeBuffer,
+                                         size_t        *aAttributeLength,
+                                         size_t         aAttributeBufferSize,
+                                         int           *aAns1Type)
+{
+    Error                          error = kErrorNone;
+    const mbedtls_asn1_named_data *data;
+    size_t                         length;
+    mbedtls_x509_crt              *peerCert = const_cast<mbedtls_x509_crt *>(mbedtls_ssl_get_peer_cert(&mSsl));
+
+    if (aAttributeLength != nullptr)
+    {
+        *aAttributeLength = 0;
+    }
+
+    VerifyOrExit(aAttributeBuffer != nullptr, error = kErrorNoBufs);
+    VerifyOrExit(peerCert != nullptr, error = kErrorInvalidState);
+    data = mbedtls_asn1_find_named_data(&peerCert->subject, aOid, aOidLength);
+    VerifyOrExit(data != nullptr, error = kErrorNotFound);
+    length = data->val.len;
+    VerifyOrExit(length <= aAttributeBufferSize, error = kErrorNoBufs);
+
+    if (aAttributeLength != nullptr)
+    {
+        *aAttributeLength = length;
+    }
+
+    if (aAns1Type != nullptr)
+    {
+        *aAns1Type = data->val.tag;
+    }
+
+    memcpy(aAttributeBuffer, data->val.p, length);
+
+exit:
+    return error;
+}
+
+Error Dtls::GetThreadAttributeFromPeerCertificate(int            aThreadOidDescriptor,
+                                                  unsigned char *aAttributeBuffer,
+                                                  size_t        *aAttributeLength,
+                                                  size_t         aAttributeBufferSize)
+{
+    const mbedtls_x509_crt *cert = mbedtls_ssl_get_peer_cert(&mSsl);
+
+    return GetThreadAttributeFromCertificate(cert, aThreadOidDescriptor, aAttributeBuffer, aAttributeLength,
+                                             aAttributeBufferSize);
+}
+
+#endif // defined(MBEDTLS_SSL_KEEP_PEER_CERTIFICATE)
+
+Error Dtls::GetThreadAttributeFromOwnCertificate(int            aThreadOidDescriptor,
+                                                 unsigned char *aAttributeBuffer,
+                                                 size_t        *aAttributeLength,
+                                                 size_t         aAttributeBufferSize)
+{
+    const mbedtls_x509_crt *cert = &mOwnCert;
+
+    return GetThreadAttributeFromCertificate(cert, aThreadOidDescriptor, aAttributeBuffer, aAttributeLength,
+                                             aAttributeBufferSize);
+}
+
+Error Dtls::GetThreadAttributeFromCaCertificateChain(int            aThreadOidDescriptor,
+                                                     unsigned char *aAttributeBuffer,
+                                                     size_t        *aAttributeLength,
+                                                     size_t         aAttributeBufferSize)
+{
+    const mbedtls_x509_crt *cert = &mCaChain;
+
+    return GetThreadAttributeFromCertificate(cert, aThreadOidDescriptor, aAttributeBuffer, aAttributeLength,
+                                             aAttributeBufferSize);
+}
+
+Error Dtls::GetThreadAttributeFromCertificate(const mbedtls_x509_crt *aCert,
+                                              int                     aThreadOidDescriptor,
+                                              unsigned char          *aAttributeBuffer,
+                                              size_t                 *aAttributeLength,
+                                              size_t                  aAttributeBufferSize)
+{
+    Error            error  = kErrorNotFound;
+    char             oid[9] = {0x2B, 0x06, 0x01, 0x04, 0x01, static_cast<char>(0x82), static_cast<char>(0xDF),
+                               0x2A, 0x00}; // 1.3.6.1.4.1.44970.0
+    mbedtls_x509_buf v3_ext;
+    unsigned char   *p, *end, *end_ext_data;
+    size_t           len;
+    mbedtls_x509_buf extn_oid;
+    int              ret, is_critical;
+
+    if (aAttributeLength != nullptr)
+    {
+        *aAttributeLength = 0;
+    }
+
+    VerifyOrExit(aCert != nullptr, error = kErrorInvalidState);
+    v3_ext = aCert->v3_ext;
+    p      = v3_ext.p;
+    VerifyOrExit(p != nullptr, error = kErrorInvalidState);
+    end = p + v3_ext.len;
+    VerifyOrExit(mbedtls_asn1_get_tag(&p, end, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE) == 0,
+                 error = kErrorParse);
+    VerifyOrExit(end == p + len, error = kErrorParse);
+
+    VerifyOrExit(aThreadOidDescriptor < 128, error = kErrorNotImplemented);
+    oid[sizeof(oid) - 1] = static_cast<char>(aThreadOidDescriptor);
+
+    while (p < end)
+    {
+        is_critical = 0;
+        VerifyOrExit(mbedtls_asn1_get_tag(&p, end, &len, MBEDTLS_ASN1_CONSTRUCTED | MBEDTLS_ASN1_SEQUENCE) == 0,
+                     error = kErrorParse);
+        end_ext_data = p + len;
+
+        // Get extension ID
+        VerifyOrExit(mbedtls_asn1_get_tag(&p, end_ext_data, &extn_oid.len, MBEDTLS_ASN1_OID) == 0, error = kErrorParse);
+        extn_oid.tag = MBEDTLS_ASN1_OID;
+        extn_oid.p   = p;
+        p += extn_oid.len;
+
+        // Get optional critical
+        ret = mbedtls_asn1_get_bool(&p, end_ext_data, &is_critical);
+        VerifyOrExit(ret == 0 || ret == MBEDTLS_ERR_ASN1_UNEXPECTED_TAG, error = kErrorParse);
+
+        // Data should be octet string type
+        VerifyOrExit(mbedtls_asn1_get_tag(&p, end_ext_data, &len, MBEDTLS_ASN1_OCTET_STRING) == 0, error = kErrorParse);
+        VerifyOrExit(end_ext_data == p + len, error = kErrorParse);
+
+        if (is_critical)
+            continue;
+        if (extn_oid.len != sizeof(oid))
+            continue;
+
+        if (memcmp(extn_oid.p, oid, sizeof(oid)) == 0)
+        {
+            if (aAttributeLength != nullptr)
+            {
+                *aAttributeLength = len;
+            }
+
+            if (aAttributeBuffer != nullptr)
+            {
+                VerifyOrExit(len <= aAttributeBufferSize, error = kErrorNoBufs);
+                memcpy(aAttributeBuffer, p, len);
+            }
+
+            error = kErrorNone;
+            break;
+        }
+    }
+
+exit:
+    return error;
+}
+
+#endif // OPENTHREAD_CONFIG_TLS_API_ENABLE
 
 #ifdef MBEDTLS_SSL_SRV_C
 Error Dtls::SetClientId(const uint8_t *aClientId, uint8_t aLength)
@@ -606,10 +796,10 @@ int Dtls::HandleMbedtlsTransmit(const unsigned char *aBuf, size_t aLength)
     {
         LogDebg("HandleMbedtlsTransmit");
     }
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
     else
     {
-        LogDebg("ApplicationCoapSecure HandleMbedtlsTransmit");
+        LogDebg("Application CoapSecure or Ble HandleMbedtlsTransmit");
     }
 #endif
 
@@ -650,10 +840,10 @@ int Dtls::HandleMbedtlsReceive(unsigned char *aBuf, size_t aLength)
     {
         LogDebg("HandleMbedtlsReceive");
     }
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
     else
     {
-        LogDebg("ApplicationCoapSecure HandleMbedtlsReceive");
+        LogDebg("Application CoapSecure or Ble HandleMbedtlsReceive");
     }
 #endif
 
@@ -682,10 +872,10 @@ int Dtls::HandleMbedtlsGetTimer(void)
     {
         LogDebg("HandleMbedtlsGetTimer");
     }
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
     else
     {
-        LogDebg("ApplicationCoapSecure HandleMbedtlsGetTimer");
+        LogDebg("Application CoapSecure or Ble HandleMbedtlsGetTimer");
     }
 #endif
 
@@ -720,10 +910,10 @@ void Dtls::HandleMbedtlsSetTimer(uint32_t aIntermediate, uint32_t aFinish)
     {
         LogDebg("SetTimer");
     }
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
     else
     {
-        LogDebg("ApplicationCoapSecure SetTimer");
+        LogDebg("Application CoapSecure or Ble SetTimer");
     }
 #endif
 

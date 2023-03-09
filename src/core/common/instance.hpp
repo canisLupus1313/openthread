@@ -97,6 +97,7 @@
 #include "net/sntp_client.hpp"
 #include "net/srp_client.hpp"
 #include "net/srp_server.hpp"
+#include "radio/ble_secure.hpp"
 #include "thread/address_resolver.hpp"
 #include "thread/announce_begin_server.hpp"
 #include "thread/announce_sender.hpp"
@@ -324,6 +325,16 @@ public:
      *
      */
     Coap::CoapSecure &GetApplicationCoapSecure(void) { return mApplicationCoapSecure; }
+#endif
+
+#if OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
+    /**
+     * This method returns a reference to application BLE Secure object.
+     *
+     * @returns A reference to the application BLE Secure object.
+     *
+     */
+    Ble::BleSecure &GetApplicationBleSecure(void) { return mApplicationBleSecure; }
 #endif
 
 #if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE
@@ -588,6 +599,10 @@ private:
 
 #if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
     Coap::CoapSecure mApplicationCoapSecure;
+#endif
+
+#if OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
+    Ble::BleSecure mApplicationBleSecure;
 #endif
 
 #if OPENTHREAD_CONFIG_PING_SENDER_ENABLE
