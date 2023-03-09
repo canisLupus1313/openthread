@@ -36,12 +36,22 @@
 
 #include "openthread-core-config.h"
 
+#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE || OPENTHREAD_CONFIG_BLE_SECURE_ENABLE
+#define OPENTHREAD_CONFIG_TLS_API_ENABLE 1
+#endif
+
 #include <mbedtls/net_sockets.h>
 #include <mbedtls/ssl.h>
 #include <mbedtls/ssl_cookie.h>
 #include <mbedtls/version.h>
 
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_BLE_SECURE_ENABLE
+#ifndef MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
+#error OPENTHREAD_CONFIG_BLE_SECURE_ENABLE requires MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
+#endif
+#endif
+
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
 #ifdef MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
 #include <mbedtls/base64.h>
 #include <mbedtls/x509.h>
@@ -77,7 +87,7 @@ public:
      * @param[in]  aLayerTwoSecurity    Specifies whether to use layer two security or not.
      *
      */
-    explicit Dtls(Instance &aInstance, bool aLayerTwoSecurity);
+    explicit Dtls(Instance &aInstance, bool aLayerTwoSecurity, bool aDatagramTransport = true);
 
     /**
      * This function pointer is called when a connection is established or torn down.
@@ -210,7 +220,7 @@ public:
      */
     Error SetPsk(const uint8_t *aPsk, uint8_t aPskLength);
 
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
 #ifdef MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
     /**
      * This method sets the Pre-Shared Key (PSK) for DTLS sessions-
@@ -288,7 +298,7 @@ public:
      *
      */
     void SetSslAuthMode(bool aVerifyPeerCertificate) { mVerifyPeerCertificate = aVerifyPeerCertificate; }
-#endif // OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#endif // OPENTHREAD_CONFIG_TLS_API_ENABLE
 
 #ifdef MBEDTLS_SSL_SRV_C
     /**
@@ -355,7 +365,7 @@ private:
 
     static constexpr uint32_t kGuardTimeNewConnectionMilli = 2000;
 
-#if !OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if !OPENTHREAD_CONFIG_TLS_API_ENABLE
     static constexpr uint16_t kApplicationDataMaxLength = 1152;
 #else
     static constexpr uint16_t         kApplicationDataMaxLength = OPENTHREAD_CONFIG_DTLS_APPLICATION_DATA_MAX_LENGTH;
@@ -367,14 +377,14 @@ private:
     void  FreeMbedtls(void);
     Error Setup(bool aClient);
 
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
     /**
      * Set keys and/or certificates for dtls session dependent of used cipher suite.
      *
      * @retval mbedtls error, 0 if successfully.
      *
      */
-    int SetApplicationCoapSecureKeys(void);
+    int SetApplicationSecureKeys(void);
 #endif
 
     static void HandleMbedtlsDebug(void *aContext, int aLevel, const char *aFile, int aLine, const char *aStr);
@@ -457,7 +467,7 @@ private:
 #endif
 #endif
 
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
 #ifdef MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
     const uint8_t     *mCaChainSrc;
     uint32_t           mCaChainLength;
@@ -492,16 +502,19 @@ private:
     bool      mTimerSet : 1;
 
     bool mLayerTwoSecurity : 1;
+    bool mDatagramTransport : 1;
 
     Message *mReceiveMessage;
 
     Callback<ConnectedHandler> mConnectedCallback;
     Callback<ReceiveHandler>   mReceiveCallback;
+    void *           mContext;
 
     Ip6::MessageInfo mMessageInfo;
     Ip6::Udp::Socket mSocket;
 
     Callback<TransportCallback> mTransportCallback;
+    void *            mTransportContext;
 
     Message::SubType mMessageSubType;
     Message::SubType mMessageDefaultSubType;
