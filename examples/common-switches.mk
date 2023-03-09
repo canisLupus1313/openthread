@@ -30,6 +30,7 @@
 
 ANYCAST_LOCATOR           ?= 0
 BACKBONE_ROUTER           ?= 0
+BBTC                      ?= 0
 BIG_ENDIAN                ?= 0
 BORDER_AGENT              ?= 0
 BORDER_ROUTER             ?= 0
@@ -102,6 +103,10 @@ endif
 
 ifeq ($(BACKBONE_ROUTER),1)
 COMMONCFLAGS                   += -DOPENTHREAD_CONFIG_BACKBONE_ROUTER_ENABLE=1
+endif
+
+ifeq ($(BBTC),1)
+COMMONCFLAGS                   += -DOPENTHREAD_CONFIG_BLE_TCAT_ENABLE=1
 endif
 
 ifeq ($(BIG_ENDIAN),1)

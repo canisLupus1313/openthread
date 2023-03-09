@@ -36,12 +36,22 @@
 
 #include "openthread-core-config.h"
 
+#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE || OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
+#define OPENTHREAD_CONFIG_TLS_API_ENABLE 1
+#endif
+
 #include <mbedtls/net_sockets.h>
 #include <mbedtls/ssl.h>
 #include <mbedtls/ssl_cookie.h>
 #include <mbedtls/version.h>
 
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
+#ifndef MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
+#error OPENTHREAD_CONFIG_BLE_TCAT_ENABLE requires MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
+#endif
+#endif
+
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
 #if defined(MBEDTLS_BASE64_C) && defined(MBEDTLS_SSL_KEEP_PEER_CERTIFICATE)
 #include <mbedtls/base64.h>
 #endif
@@ -79,7 +89,7 @@ public:
      * @param[in]  aLayerTwoSecurity    Specifies whether to use layer two security or not.
      *
      */
-    explicit Dtls(Instance &aInstance, bool aLayerTwoSecurity);
+    explicit Dtls(Instance &aInstance, bool aLayerTwoSecurity, bool aDatagramTransport = true);
 
     /**
      * Pointer is called when a connection is established or torn down.
@@ -212,7 +222,7 @@ public:
      */
     Error SetPsk(const uint8_t *aPsk, uint8_t aPskLength);
 
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
 #ifdef MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
     /**
      * Sets the Pre-Shared Key (PSK) for DTLS sessions-
@@ -280,6 +290,106 @@ public:
     Error GetPeerCertificateBase64(unsigned char *aPeerCert, size_t *aCertLength, size_t aCertBufferSize);
 #endif // defined(MBEDTLS_BASE64_C) && defined(MBEDTLS_SSL_KEEP_PEER_CERTIFICATE)
 
+#if defined(MBEDTLS_SSL_KEEP_PEER_CERTIFICATE)
+    /**
+     * Returns an attribute value identified by its OID from the subject
+     * of the peer x509 certificate. The peer OID is provided in binary format.
+     * The attribute length is set if the attribute was successfully read or zero
+     * if unsuccessful. The ANS1 type as is set as defineded in the ITU-T X.690 standard
+     * if the attribute was successfully read.
+     *
+     * @param[in]   aOid                  A pointer to the OID to be found.
+     * @param[in]   aOidLength            The length of the OID.
+     * @param[out]  aAttributeBuffer      A pointer to the attribute buffer.
+     * @param[out]  aAttributeLength      A pointer to the length of the attribute written to the buffer.
+     * @param[in]   aAttributeBufferSize  The buffer size of aAttributeBuffer.
+     * @param[out]  aAns1Type             A pointer to the ANS1 type of the attribute written to the buffer.
+     *
+     * @retval kErrorInvalidState   Not connected yet.
+     * @retval kErrorNone           Successfully read attribute.
+     * @retval kErrorNoBufs         Insufficient memory for storing the attribute value.
+     *
+     */
+    Error GetPeerSubjectAttributeByOid(const char    *aOid,
+                                       size_t         aOidLength,
+                                       unsigned char *aAttributeBuffer,
+                                       size_t        *aAttributeLength,
+                                       size_t         aAttributeBufferSize,
+                                       int           *aAns1Type);
+
+    /**
+     * This method returns an attribute value for the OID 1.3.6.1.4.1.44970.x from the v3 extensions of
+     * the peer x509 certificate, where the last digit x is set to aThreadOidDescriptor.
+     * The attribute length is set if the attribute was successfully read or zero if unsuccessful.
+     * This method requires a connection to be active.
+     *
+     * @param[in]   aThreadOidDescriptor  The last digit of the Thread attribute OID.
+     * @param[out]  aAttributeBuffer      A pointer to the attribute buffer.
+     * @param[out]  aAttributeLength      A pointer to the length of the attribute written to the buffer.
+     * @param[in]   aAttributeBufferSize  The buffer size of aAttributeBuffer.
+     *
+     * @retval kErrorNone             Successfully read attribute.
+     * @retval kErrorNotFound         The requested attribute was not found.
+     * @retval kErrorNoBufs           Insufficient memory for storing the attribute value.
+     * @retval kErrorInvalidState     Not connected yet.
+     * @retval kErrorNotImplemented   The value of aThreadOidDescriptor is >127.
+     * @retval kErrorParse            The certificate extensions could not be parsed.
+     *
+     */
+    Error GetThreadAttributeFromPeerCertificate(int            aThreadOidDescriptor,
+                                                unsigned char *aAttributeBuffer,
+                                                size_t        *aAttributeLength,
+                                                size_t         aAttributeBufferSize);
+#endif // defined(MBEDTLS_SSL_KEEP_PEER_CERTIFICATE)
+
+    /**
+     * This method returns an attribute value for the OID 1.3.6.1.4.1.44970.x from the v3 extensions of
+     * the own x509 certificate, where the last digit x is set to aThreadOidDescriptor.
+     * The attribute length is set if the attribute was successfully read or zero if unsuccessful.
+     * This method requires a connection to be active.
+     *
+     * @param[in]   aThreadOidDescriptor  The last digit of the Thread attribute OID.
+     * @param[out]  aAttributeBuffer      A pointer to the attribute buffer.
+     * @param[out]  aAttributeLength      A pointer to the length of the attribute written to the buffer.
+     * @param[in]   aAttributeBufferSize  The buffer size of aAttributeBuffer.
+     *
+     * @retval kErrorNone             Successfully read attribute.
+     * @retval kErrorNotFound         The requested attribute was not found.
+     * @retval kErrorNoBufs           Insufficient memory for storing the attribute value.
+     * @retval kErrorInvalidState     Not connected yet.
+     * @retval kErrorNotImplemented   The value of aThreadOidDescriptor is >127.
+     * @retval kErrorParse            The certificate extensions could not be parsed.
+     *
+     */
+    Error GetThreadAttributeFromOwnCertificate(int            aThreadOidDescriptor,
+                                               unsigned char *aAttributeBuffer,
+                                               size_t        *aAttributeLength,
+                                               size_t         aAttributeBufferSize);
+
+    /**
+     * This method returns an attribute value for the OID 1.3.6.1.4.1.44970.x from the v3 extensions of
+     * the CA x509 certificate chain, where the last digit x is set to aThreadOidDescriptor.
+     * The attribute length is set if the attribute was successfully read or zero if unsuccessful.
+     * This method requires a connection to be active.
+     *
+     * @param[in]   aThreadOidDescriptor  The last digit of the Thread attribute OID.
+     * @param[out]  aAttributeBuffer      A pointer to the attribute buffer.
+     * @param[out]  aAttributeLength      A pointer to the length of the attribute written to the buffer.
+     * @param[in]   aAttributeBufferSize  The buffer size of aAttributeBuffer.
+     *
+     * @retval kErrorNone             Successfully read attribute.
+     * @retval kErrorNotFound         The requested attribute was not found.
+     * @retval kErrorNoBufs           Insufficient memory for storing the attribute value.
+     * @retval kErrorInvalidState     Not connected yet.
+     * @retval kErrorNotImplemented   The value of aThreadOidDescriptor is >127.
+     * @retval kErrorParse            The certificate extensions could not be parsed.
+     *
+     */
+    Error GetThreadAttributeFromCaCertificateChain(int            aThreadOidDescriptor,
+                                                   unsigned char *aAttributeBuffer,
+                                                   size_t        *aAttributeLength,
+                                                   size_t         aAttributeBufferSize);
+
     /**
      * Set the authentication mode for a dtls connection.
      *
@@ -290,7 +400,7 @@ public:
      *
      */
     void SetSslAuthMode(bool aVerifyPeerCertificate) { mVerifyPeerCertificate = aVerifyPeerCertificate; }
-#endif // OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#endif // OPENTHREAD_CONFIG_TLS_API_ENABLE
 
 #ifdef MBEDTLS_SSL_SRV_C
     /**
@@ -357,7 +467,7 @@ private:
 
     static constexpr uint32_t kGuardTimeNewConnectionMilli = 2000;
 
-#if !OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if !OPENTHREAD_CONFIG_TLS_API_ENABLE
     static constexpr uint16_t kApplicationDataMaxLength = 1152;
 #else
     static constexpr uint16_t         kApplicationDataMaxLength = OPENTHREAD_CONFIG_DTLS_APPLICATION_DATA_MAX_LENGTH;
@@ -369,14 +479,20 @@ private:
     void  FreeMbedtls(void);
     Error Setup(bool aClient);
 
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
     /**
      * Set keys and/or certificates for dtls session dependent of used cipher suite.
      *
      * @retval mbedtls error, 0 if successfully.
      *
      */
-    int SetApplicationCoapSecureKeys(void);
+    int SetApplicationSecureKeys(void);
+
+    Error GetThreadAttributeFromCertificate(const mbedtls_x509_crt *aCert,
+                                            int                     aThreadOidDescriptor,
+                                            unsigned char          *aAttributeBuffer,
+                                            size_t                 *aAttributeLength,
+                                            size_t                  aAttributeBufferSize);
 #endif
 
     static void HandleMbedtlsDebug(void *aContext, int aLevel, const char *aFile, int aLine, const char *aStr);
@@ -459,7 +575,7 @@ private:
 #endif
 #endif
 
-#if OPENTHREAD_CONFIG_COAP_SECURE_API_ENABLE
+#if OPENTHREAD_CONFIG_TLS_API_ENABLE
 #ifdef MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
     const uint8_t     *mCaChainSrc;
     uint32_t           mCaChainLength;
@@ -494,16 +610,19 @@ private:
     bool      mTimerSet : 1;
 
     bool mLayerTwoSecurity : 1;
+    bool mDatagramTransport : 1;
 
     Message *mReceiveMessage;
 
     Callback<ConnectedHandler> mConnectedCallback;
     Callback<ReceiveHandler>   mReceiveCallback;
+    void                      *mContext;
 
     Ip6::MessageInfo mMessageInfo;
     Ip6::Udp::Socket mSocket;
 
     Callback<TransportCallback> mTransportCallback;
+    void                       *mTransportContext;
 
     Message::SubType mMessageSubType;
     Message::SubType mMessageDefaultSubType;

@@ -103,6 +103,7 @@ endif()
 
 add_library(openthread-posix
     alarm.cpp
+    ble.cpp
     backbone.cpp
     backtrace.cpp
     config_file.cpp
