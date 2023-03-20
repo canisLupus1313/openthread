@@ -47,6 +47,8 @@ set(OT_CONFIG_VALUES
     "OFF"
 )
 
+option(OT_TCP "enable TCP" ON)
+
 macro(ot_option name ot_config description)
     # Declare an OT cmake config with `name` mapping to OPENTHREAD_CONFIG
     # `ot_config`. Parameter `description` provides the help string for this
@@ -190,8 +192,6 @@ else()
     message(FATAL_ERROR "Invalid max RCP restoration count: ${OT_RCP_RESTORATION_MAX_COUNT}")
 endif()
 
-option(OT_EXCLUDE_TCPLP_LIB "exclude TCPlp library from build")
-
 if(NOT OT_EXTERNAL_MBEDTLS)
     set(OT_MBEDTLS mbedtls)
     target_compile_definitions(ot-config INTERFACE "OPENTHREAD_CONFIG_ENABLE_BUILTIN_MBEDTLS=1")
@@ -224,3 +224,4 @@ macro(ot_removed_option name error)
 endmacro()
 
 ot_removed_option(OT_MTD_NETDIAG "- Use OT_NETDIAG_CLIENT instead - note that server function is always supported")
+ot_removed_option(OT_EXCLUDE_TCPLP_LIB "- Use OT_TCP instead, OT_EXCLUDE_TCPLP_LIB is deprecated")
