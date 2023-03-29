@@ -1131,6 +1131,7 @@ Done
 Set the default query config.
 
 To set protocol effectively to tcp `OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TCP_ENABLE` is required.
+To set protocol effectively to tls `OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TLS_ENABLE` is required.
 
 ```bash
 > dns config fd00::1 1234 5000 2 0 tcp

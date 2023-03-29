@@ -83,7 +83,8 @@ typedef enum
 /**
  * This enumeration type represents the DNS transport protocol in an `otDnsQueryConfig`.
  *
- * This `OT_DNS_TRANSPORT_TCP` is only supported when `OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TCP_ENABLE` is enabled.
+ * `OT_DNS_TRANSPORT_TCP` is only supported when `OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TCP_ENABLE` is enabled.
+ * `OT_DNS_TRANSPORT_TLS` is only supported when `OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TLS_ENABLE` is enabled.
  *
  */
 typedef enum
@@ -91,6 +92,7 @@ typedef enum
     OT_DNS_TRANSPORT_UNSPECIFIED = 0, /// DNS transport is unspecified.
     OT_DNS_TRANSPORT_UDP         = 1, /// DNS query should be sent via UDP.
     OT_DNS_TRANSPORT_TCP         = 2, /// DNS query should be sent via TCP.
+    OT_DNS_TRANSPORT_TLS         = 3, /// DNS query should be sent via TLS.
 } otDnsTransportProto;
 
 /**

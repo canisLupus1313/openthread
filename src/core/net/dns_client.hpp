@@ -65,6 +65,10 @@
 #error "OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TCP_ENABLE requires OPENTHREAD_CONFIG_TCP_ENABLE"
 #endif
 
+#if (!OPENTHREAD_CONFIG_TCP_ENABLE || !OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TCP_ENABLE) && OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TLS_ENABLE
+#error "OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TLS_ENABLE requires OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TCP_ENABLE"
+#endif
+
 /**
  * This struct represents an opaque (and empty) type for a response to an address resolution DNS query.
  *
@@ -154,6 +158,7 @@ public:
             kDnsTransportUnspecified = OT_DNS_TRANSPORT_UNSPECIFIED, /// Dns transport is unspecified.
             kDnsTransportUdp         = OT_DNS_TRANSPORT_UDP,         /// Dns query should be sent via UDP.
             kDnsTransportTcp         = OT_DNS_TRANSPORT_TCP,         /// Dns query should be sent via TCP.
+            kDnsTransportTls         = OT_DNS_TRANSPORT_TLS,         /// Dns query should be sent via TLS.
         };
 
         /**

@@ -3012,8 +3012,8 @@ template <> otError Interpreter::Process<Cmd("dns")>(Arg aArgs[])
             OutputLine("RecursionDesired: %s",
                        (defaultConfig->mRecursionFlag == OT_DNS_FLAG_RECURSION_DESIRED) ? "yes" : "no");
 #if OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TCP_ENABLE
-            OutputLine("TransportProtocol: %s",
-                       (defaultConfig->mTransportProto == OT_DNS_TRANSPORT_UDP) ? "udp" : "tcp");
+            static const char *const kDnsTransportProtocol[] = {"unspecified", "udp", "tcp", "tls"};
+            OutputLine("TransportProtocol: %s", kDnsTransportProtocol[defaultConfig->mTransportProto]);
 #endif
         }
         /* clang-format off */
@@ -3291,7 +3291,11 @@ otError Interpreter::GetDnsConfig(Arg aArgs[], otDnsQueryConfig *&aConfig)
     aConfig->mRecursionFlag = recursionDesired ? OT_DNS_FLAG_RECURSION_DESIRED : OT_DNS_FLAG_NO_RECURSION;
 
     VerifyOrExit(!aArgs[5].IsEmpty());
-    if (aArgs[5] == "tcp")
+    if (aArgs[5] == "tls")
+    {
+        aConfig->mTransportProto = OT_DNS_TRANSPORT_TLS;
+    }
+    else if (aArgs[5] == "tcp")
     {
         aConfig->mTransportProto = OT_DNS_TRANSPORT_TCP;
     }

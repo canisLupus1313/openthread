@@ -96,6 +96,7 @@ jobs:
         sudo systemctl restart ntp
         sudo socat 'UDP6-LISTEN:53,fork,reuseaddr,bind=[::1]' UDP:127.0.0.53:53 &
         socat 'TCP6-LISTEN:2000,fork,reuseaddr' TCP:127.0.0.53:53 &
+        socat 'TCP6-LISTEN:2853,fork,reuseaddr' TCP:8.8.8.8 &
         host ipv6.google.com 127.0.0.53
         host ipv6.google.com ::1
         ulimit -c unlimited

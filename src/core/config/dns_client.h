@@ -162,6 +162,17 @@
 #endif
 
 /**
+ * @def OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TLS_ENABLE
+ *
+ * Enables support for sending DNS Queries over TLS.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TLS_ENABLE
+#define OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TLS_ENABLE 0
+#endif
+
+
+/**
  * @def OPENTHREAD_CONFIG_DNS_CLIENT_OVER_TCP_QUERY_MAX_SIZE
  *
  * Specifies size of receive and transmit buffers of TCP sockets for DNS query over TCP.
