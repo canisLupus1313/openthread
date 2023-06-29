@@ -217,7 +217,7 @@ Error BleSecure::HandleBleReceive(uint8_t *aBuf, uint16_t aLength)
 
     // Cannot call Receive(..) directly because Setup(..) and mState are private
     mTls.HandleUdpReceive(*message, theMessageInfo);
-    // mTls.Receive(*message);
+
     FreeMessage(message);
 
     return kErrorNone;
@@ -237,7 +237,7 @@ Error BleSecure::HandleBleConnected(uint16_t aConnectionId)
 
     if (mConnectCallback != nullptr)
     {
-        mConnectCallback(IsConnected(), mBleConnectionOpen, mContext);
+        mConnectCallback(&GetInstance(), IsConnected(), mBleConnectionOpen, mContext);
     }
 
     return kErrorNone;
@@ -252,7 +252,7 @@ Error BleSecure::HandleBleDisconnected(uint16_t aConnectionId)
 
     if (!IsConnected() && mConnectCallback != nullptr)
     {
-        mConnectCallback(false, mBleConnectionOpen, mContext);
+        mConnectCallback(&GetInstance(), false, mBleConnectionOpen, mContext);
     }
 
     Disconnect(); // Stop TLS connection attempt from client if still running
@@ -289,7 +289,7 @@ void BleSecure::HandleTlsConnected(bool aConnected)
 
     if (mConnectCallback != nullptr)
     {
-        mConnectCallback(aConnected, mBleConnectionOpen, mContext);
+        mConnectCallback(&GetInstance(), aConnected, mBleConnectionOpen, mContext);
     }
 }
 
@@ -362,14 +362,14 @@ void BleSecure::HandleTlsReceive(uint8_t *aBuf, uint16_t aLength)
                     if (error == kErrorNotTmf && mReceiveCallback != nullptr)
                     {
                         mReceivedMessage->SetOffset(offset);
-                        mReceiveCallback(mReceivedMessage, mContext);
+                        mReceiveCallback(&GetInstance(), mReceivedMessage, mContext);
                     }
                 }
             }
             else if (mReceiveCallback != nullptr)
             {
                 mReceivedMessage->SetOffset(offset);
-                mReceiveCallback(mReceivedMessage, mContext);
+                mReceiveCallback(&GetInstance(), mReceivedMessage, mContext);
             }
 
             SuccessOrExit(mReceivedMessage->SetLength(0)); // also sets the offset to 0
@@ -382,7 +382,7 @@ void BleSecure::HandleTlsReceive(uint8_t *aBuf, uint16_t aLength)
 
         if (mReceiveCallback != nullptr)
         {
-            mReceiveCallback(mReceivedMessage, mContext);
+            mReceiveCallback(&GetInstance(), mReceivedMessage, mContext);
         }
 
         mReceivedMessage->SetLength(0);

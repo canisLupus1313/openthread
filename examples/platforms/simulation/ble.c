@@ -27,15 +27,18 @@
  */
 
 #include <openthread/platform/ble.h>
+#include <stdio.h>
 
 otError otPlatBleEnable(otInstance *aInstance)
 {
     OT_UNUSED_VARIABLE(aInstance);
+    printf("function: %s line: %d\n", __func__, __LINE__);
     return OT_ERROR_NOT_IMPLEMENTED;
 }
 
 otError otPlatBleDisable(otInstance *aInstance)
 {
+    printf("function: %s line: %d\n", __func__, __LINE__);
     OT_UNUSED_VARIABLE(aInstance);
     return OT_ERROR_NOT_IMPLEMENTED;
 }
@@ -45,18 +48,21 @@ otError otPlatBleGapAdvStart(otInstance *aInstance, uint16_t aInterval, uint8_t 
     OT_UNUSED_VARIABLE(aInstance);
     OT_UNUSED_VARIABLE(aInterval);
     OT_UNUSED_VARIABLE(aType);
+    printf("function: %s line: %d\n", __func__, __LINE__);
     return OT_ERROR_NOT_IMPLEMENTED;
 }
 
 otError otPlatBleGapAdvStop(otInstance *aInstance)
 {
     OT_UNUSED_VARIABLE(aInstance);
+    printf("function: %s line: %d\n", __func__, __LINE__);
     return OT_ERROR_NOT_IMPLEMENTED;
 }
 
 otError otPlatBleGapDisconnect(otInstance *aInstance)
 {
     OT_UNUSED_VARIABLE(aInstance);
+    printf("function: %s line: %d\n", __func__, __LINE__);
     return OT_ERROR_NOT_IMPLEMENTED;
 }
 
@@ -64,6 +70,7 @@ otError otPlatBleGattMtuGet(otInstance *aInstance, uint16_t *aMtu)
 {
     OT_UNUSED_VARIABLE(aInstance);
     OT_UNUSED_VARIABLE(aMtu);
+    printf("function: %s line: %d\n", __func__, __LINE__);
     return OT_ERROR_NOT_IMPLEMENTED;
 }
 
@@ -72,5 +79,6 @@ otError otPlatBleGattServerIndicate(otInstance *aInstance, uint16_t aHandle, otB
     OT_UNUSED_VARIABLE(aInstance);
     OT_UNUSED_VARIABLE(aHandle);
     OT_UNUSED_VARIABLE(aPacket);
+    printf("function: %s line: %d\n", __func__, __LINE__);
     return OT_ERROR_NOT_IMPLEMENTED;
 }

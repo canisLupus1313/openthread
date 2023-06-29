@@ -129,6 +129,7 @@ typedef struct otTcatElevationPsk
 /**
  * This function pointer is called to notify the completion of a join operation.
  *
+ * @param[in]  aInstance            A pointer to an OpenThread instance.
  * @param[in]  aError           OT_ERROR_NONE if the join process succeeded.
  *                              OT_ERROR_SECURITY if the join process failed due to security credentials.
  *
@@ -140,13 +141,14 @@ typedef void (*otHandleTcatJoin)(otError aError, void *aContext);
 /**
  * This function pointer is called when the secure BLE connection state changes.
  *
+ * @param[in]  aInstance            A pointer to an OpenThread instance.
  * @param[in]  aConnected           TRUE, if a secure connection was established, FALSE otherwise.
  * @param[in]  aBleConnectionOpen   TRUE if a BLE connection was established to carry a TLS data stream, FALSE
- * otherwise.
+ *                                  otherwise.
  * @param[in]  aContext             A pointer to arbitrary context information.
  *
  */
-typedef void (*otHandleBleSecureConnect)(bool aConnected, bool aBleConnectionOpen, void *aContext);
+typedef void (*otHandleBleSecureConnect)(otInstance *aInstance, bool aConnected, bool aBleConnectionOpen, void *aContext);
 
 /**
  * This function pointer is called when data was received over the TLS connection.
@@ -158,7 +160,7 @@ typedef void (*otHandleBleSecureConnect)(bool aConnected, bool aBleConnectionOpe
  * @param[in]  aContext         A pointer to arbitrary context information.
  *
  */
-typedef void (*otHandleBleSecureReceive)(otMessage *aMessage, void *aContext);
+typedef void (*otHandleBleSecureReceive)(otInstance *aInstance, otMessage *aMessage, void *aContext);
 
 /**
  * This function starts the BLE Secure service.

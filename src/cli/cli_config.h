@@ -59,6 +59,16 @@
 #endif
 
 /**
+ * @def OPENTHREAD_CONFIG_BLE_SECURE_CLI_ENABLE
+ *
+ * Indicates whether TCAT should be enabled in the CLI tool.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_BLE_SECURE_CLI_ENABLE
+#define OPENTHREAD_CONFIG_BLE_SECURE_CLI_ENABLE 1
+#endif
+
+/**
  * @def OPENTHREAD_CONFIG_CLI_TCP_ENABLE
  *
  * Indicates whether TCP should be enabled in the CLI tool.
