@@ -45,6 +45,7 @@
 #define OPENTHREAD_BLE_SECURE_H_
 
 #include <stdint.h>
+#include <openthread/tcat.h>
 #include <openthread/message.h>
 
 #ifdef __cplusplus
@@ -64,79 +65,6 @@ extern "C" {
  *
  */
 
-#define OT_TCAT_ELEVATION_PSK_LENGTH \
-    32 ///< Maximum string length of a secure BLE elevation PSK (does not include null char).
-
-/**
- * This enumeration represents TCAT TLV types.
- *
- */
-typedef enum otTcatTlvType
-{
-    OT_TCAT_TLV_COMMAND        = 0,  ///< TCAT Command TLV
-    OT_TCAT_TLV_RESPONSE       = 1,  ///< TCAT Response TLV
-    OT_TCAT_TLV_ACTIVE_DATASET = 16, ///< TCAT Active Dataset TLV
-    OT_TCAT_TLV_APPLICATION    = 18, ///< TCAT Application TLV
-
-} otTcatTlvType;
-
-/**
- * This enumeration represents TCAT Command types.
- *
- */
-typedef enum otTcatCommandType
-{
-    OT_TCAT_COMMAND_TERMINATE    = 0, ///< Terminate connection
-    OT_TCAT_COMMAND_THREAD_START = 1, ///< Start Thread Interface
-    OT_TCAT_COMMAND_THREAD_STOP  = 2, ///< Stop Thread Interface
-
-} otTcatCommandType;
-
-/**
- * This enumeration represents TCAT Command types.
- *
- */
-typedef enum otTcatResponseType
-{
-    OT_TCAT_RESPONSE_SUCCESS       = 0, ///< Success
-    OT_TCAT_RESPONSE_INVALID_STATE = 1, ///< Invalid State
-    OT_TCAT_RESPONSE_PARSE_ERROR   = 2, ///< Invalid State
-
-} otTcatResponseType;
-
-/**
- * This structure represents a TCAT vendor information.
- *
- */
-typedef struct otTcatVendorInfo
-{
-    const char *mProvisioningUrl; ///< Provisioning URL path string
-    const char *mVendorName;      ///< Vendor name string
-    const char *mVendorModel;     ///< Vendor model string
-    const char *mVendorSwVersion; ///< Venor softwae version string
-    const char *mVendorData;      ///< Vendor stpecific data string
-} otTcatVendorInfo;
-
-/**
- * This structure represents a TCAT elevation PSKd.
- *
- */
-typedef struct otTcatElevationPsk
-{
-    char m8[OT_TCAT_ELEVATION_PSK_LENGTH + 1]; ///< Char string array (must be null terminated - +1 is for null char).
-} otTcatElevationPsk;
-
-/**
- * This function pointer is called to notify the completion of a join operation.
- *
- * @param[in]  aError           OT_ERROR_NONE if the join process succeeded.
- *                              OT_ERROR_SECURITY if the join process failed due to security credentials.
- *
- * @param[in]  aContext         A pointer to arbitrary context information.
- *
- */
-typedef void (*otHandleTcatJoin)(otError aError, void *aContext);
-
 /**
  * This function pointer is called when the secure BLE connection state changes.
  *
@@ -149,16 +77,18 @@ typedef void (*otHandleTcatJoin)(otError aError, void *aContext);
 typedef void (*otHandleBleSecureConnect)(bool aConnected, bool aBleConnectionOpen, void *aContext);
 
 /**
- * This function pointer is called when data was received over the TLS connection.
+ * This function pointer is called when data was received over a BLE Secure TLS connection.
  * When TLV mode is activate, the function will be called once a complete TLV was received and the
  * message offset points to the TLV value.
  *
  *
- * @param[in]  aMessage         A pointer to the message.
- * @param[in]  aContext         A pointer to arbitrary context information.
+ * @param[in]  aMessage          A pointer to the message.
+ * @param[in]  aTcatMessageType  The message type received.
+ * @param[in]  aServiceName      The name of the service the message is direced to.
+ * @param[in]  aContext          A pointer to arbitrary context information.
  *
  */
-typedef void (*otHandleBleSecureReceive)(otMessage *aMessage, void *aContext);
+typedef otHandleTcatApplicationDataReceive otHandleBleSecureReceive;
 
 /**
  * This function starts the BLE Secure service.
@@ -187,7 +117,6 @@ otError otBleSecureStart(otInstance              *aInstance,
  * Enables the TCAT protocol over BLE Secure.
  *
  * @param[in]  aInstance         A pointer to an OpenThread instance.
- * @param[in]  aElevationPsk     A pointer to the PSK for elevating the commissioner rights (may be NULL).
  * @param[in]  aVendorInfo       A pointer to the Vendor Information (must remain valid after the method call, may be
  * NULL).
  * @param[in]  aHandler          A pointer to a function that is called when the join operation completes.
@@ -198,7 +127,6 @@ otError otBleSecureStart(otInstance              *aInstance,
  *
  */
 otError otBleSecureTcatStart(otInstance       *aInstance,
-                             const char       *aElevationPsk,
                              otTcatVendorInfo *aVendorInfo,
                              otHandleTcatJoin  aHandler);
 

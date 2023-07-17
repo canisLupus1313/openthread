@@ -91,12 +91,11 @@ public:
      * Enables the TCAT protocol over BLE Secure.
      *
      * @retval kErrorNone           Successfully started the BLE Secure Joiner role.
-     * @retval kErrorInvalidArgs    The aElevationPsk or the aVendorInfo is invalid.
+     * @retval kErrorInvalidArgs    The aVendorInfo is invalid.
      * @retval kErrorInvaidState    The BLE function has not been started or line mode is not selected.
      *
      */
-    Error TcatStart(const char                      *aElevationPsk,
-                    MeshCoP::TcatAgent::VendorInfo  *aVendorInfo,
+    Error TcatStart(MeshCoP::TcatAgent::VendorInfo  *aVendorInfo,
                     MeshCoP::TcatAgent::JoinCallback aHandler);
 
     /**
@@ -141,13 +140,22 @@ public:
     bool IsTcatEnabled(void) const { return mTcatAgent.IsEnabled(); }
 
     /**
-     * This method indicates whether or not the BBTC connection has elevated TCAT rights.
+     * This method indicates whether or not the TCAT session has verified the commissioner is in possesion of PSKd.
      *
-     * @retval TRUE   The BBTC connection has elevated rights.
-     * @retval FALSE  The BBTC connection does not have elevated rights.
+     * @retval TRUE   The TCAT session has verified PSKd.
+     * @retval FALSE  The TCAT session does not verified PSKd.
      *
      */
-    bool IsTcatElevated(void) const { return mTcatAgent.IsElevated(); }
+    bool IsPskdVerified(void) const { return mTcatAgent.IsPskdVerified(); }
+
+    /**
+     * This method indicates whether or not the TCAT session has verified the commissioner is in possesion of PSKc.
+     *
+     * @retval TRUE   The TCAT session has verified PSKc.
+     * @retval FALSE  The TCAT session does not verified PSKc.
+     *
+     */
+    bool IsPskcVerified(void) const { return mTcatAgent.IsPskcVerified(); }
 
     /**
      * This method stops the TLS connection.
@@ -470,19 +478,18 @@ private:
     static Error HandleTransport(void *aContext, ot::Message &aMessage, const Ip6::MessageInfo &aMessageInfo);
     Error        HandleTransport(ot::Message &aMessage);
 
-    MeshCoP::Dtls      mTls;
-    MeshCoP::TcatAgent mTcatAgent;
-    ConnectCallback    mConnectCallback;
-    ReceiveCallback    mReceiveCallback;
-    void              *mContext;
-    bool               mTlvMode;
-    ot::Message       *mReceivedMessage;
-    ot::Message       *mSentMessage;
-    ot::MessageQueue   mTransmitQueue;
-    TaskletContext     mTransmitTask;
-    uint8_t            mPacketBuffer[kPacketBufferSize];
-    bool               mBleConnectionOpen;
-    uint16_t           mMtuSize;
+    MeshCoP::Dtls               mTls;
+    MeshCoP::TcatAgent          mTcatAgent;
+    Callback<ConnectCallback>   mConnectCallback;
+    Callback<ReceiveCallback>   mReceiveCallback;
+    bool                        mTlvMode;
+    ot::Message*                mReceivedMessage;
+    ot::Message*                mSentMessage;
+    ot::MessageQueue            mTransmitQueue;
+    TaskletContext              mTransmitTask;
+    uint8_t                     mPacketBuffer[kPacketBufferSize];
+    bool                        mBleConnectionOpen;
+    uint16_t                    mMtuSize;
 };
 
 } // namespace Ble

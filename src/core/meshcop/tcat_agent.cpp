@@ -68,32 +68,35 @@ bool TcatAgent::VendorInfo::IsValid(void) const
 TcatAgent::TcatAgent(Instance &aInstance)
     : InstanceLocator(aInstance)
     , mVendorInfo(nullptr)
-    , mJoinCallback(nullptr)
     , mEnabled(false)
-    , mElevated(false)
+    , mPskdVerified(false)
+    , mPskcVerified(false)
 {
-    mElevationPsk.m8[0] = 0;
+    mJoinerPskd.Clear();
 }
 
-Error TcatAgent::Start(const char *aElevationPsk, TcatAgent::VendorInfo *aVendorInfo, JoinCallback aHandler)
+Error TcatAgent::Start(TcatAgent::VendorInfo *aVendorInfo, AppDataReceiveCallback aAppDataReceiveCallback, JoinCallback aHandler, void* aContext)
 {
     Error error = kErrorNone;
 
     LogInfo("TCAT agent starting");
 
-    VerifyOrExit(aElevationPsk != nullptr, error = kErrorInvalidArgs);
-    VerifyOrExit(strlen(aElevationPsk) <= OT_TCAT_ELEVATION_PSK_LENGTH, error = kErrorInvalidArgs);
+    VerifyOrExit(aVendorInfo != nullptr, error = kErrorInvalidArgs);
+    VerifyOrExit(aVendorInfo->mPskdString != nullptr, error = kErrorInvalidArgs);
+    SuccessOrExit(error = mJoinerPskd.SetFrom(aVendorInfo->mPskdString));
 
     if (aVendorInfo != nullptr)
     {
         VerifyOrExit(aVendorInfo->IsValid(), error = kErrorInvalidArgs);
     }
 
-    strcpy(mElevationPsk.m8, aElevationPsk);
+    mAppDataReceiveCallback.Set(aAppDataReceiveCallback, aContext);
+    mJoinCallback.Set(aHandler, aContext);
+
     mVendorInfo   = aVendorInfo;
-    mJoinCallback = aHandler;
     mEnabled      = true;
-    mElevated     = false;
+    mPskdVerified = false;
+    mPskcVerified = false;
 
 exit:
     LogError("start TCAT agent", error);
@@ -103,8 +106,10 @@ exit:
 void TcatAgent::Stop(void)
 {
     mEnabled      = false;
-    mElevated     = false;
-    mJoinCallback = nullptr;
+    mPskdVerified = false;
+    mPskcVerified = false;
+    mAppDataReceiveCallback.Clear();      
+    mJoinCallback.Clear();
     LogInfo("TCAT agent stopped");
 }
 
@@ -118,9 +123,9 @@ Error TcatAgent::HandleSingleTlv(ot::Message   &aIncommingMessage,
     CommandType command;
 
     SuccessOrExit(error = aIncommingMessage.Read(offset, tlv));
-    VerifyOrExit(tlv.GetType() != kApplication, error = kErrorNotTmf);
-    VerifyOrExit(tlv.IsExtended() == false, error = kErrorParse);
-    offset += 2;
+
+    if (tlv.IsExtended()) offset += sizeof(ot::ExtendedTlv);
+    else offset += sizeof(ot::Tlv);
 
     switch (tlv.GetType())
     {
@@ -129,7 +134,13 @@ Error TcatAgent::HandleSingleTlv(ot::Message   &aIncommingMessage,
         error = HandleCommand(command, aOutgoingMessage, aTlsContext);
         break;
 
-    case TlvType::kActiveDataset:
+    case kSendApplicationData:       
+        aIncommingMessage.SetOffset(offset);
+        mAppDataReceiveCallback.InvokeIfSet(&aIncommingMessage, OT_TCAT_MESSAGE_TYPE_UDP, "");
+        break;  
+
+
+    case TlvType::kSetActiveOperationalDataset:
         error = HandleActiveDataset(aIncommingMessage, offset, tlv.GetLength(), aTlsContext);
         break;
 
@@ -147,9 +158,9 @@ Error TcatAgent::HandleCommand(CommandType aCommand, ot::Message &aOutgoingMessa
 
     Error        error = kErrorNone;
     ot::Tlv      tlv;
-    ResponseType response = ResponseType::kSuccess;
+    StatusCode response = StatusCode::kSuccess;
 
-    tlv.SetType(TlvType::kResponse);
+    tlv.SetType(TlvType::kResponseWithStatus);
     tlv.SetLength(sizeof(response));
 
     switch (aCommand)
@@ -162,13 +173,13 @@ Error TcatAgent::HandleCommand(CommandType aCommand, ot::Message &aOutgoingMessa
 
 #if OPENTHREAD_CONFIG_LINK_RAW_ENABLE
         if (Get<Mac::LinkRaw>().IsEnabled())
-            response = ResponseType::kInvalidState;
+            response = StatusCode::kUndefined;
 #endif
-        if (response == ResponseType::kSuccess)
+        if (response == StatusCode::kSuccess)
         {
             Get<ThreadNetif>().Up();
             if (Get<Mle::MleRouter>().Start() != kErrorNone)
-                response = ResponseType::kInvalidState;
+                response = StatusCode::kUndefined;
         }
 
         break;
@@ -178,7 +189,7 @@ Error TcatAgent::HandleCommand(CommandType aCommand, ot::Message &aOutgoingMessa
         break;
 
     default:
-        response = ResponseType::kParseError;
+        response = StatusCode::kParseError;
     }
 
     SuccessOrExit(error = aOutgoingMessage.Append(tlv));

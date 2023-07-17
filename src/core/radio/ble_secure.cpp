@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2016, The OpenThread Authors.
+ *  Copyright (c) 2022, The OpenThread Authors.
  *  All rights reserved.
  *
  *  Redistribution and use in source and binary forms, with or without
@@ -51,9 +51,6 @@ BleSecure::BleSecure(Instance &aInstance)
     : InstanceLocator(aInstance)
     , mTls(aInstance, false, false)
     , mTcatAgent(aInstance)
-    , mConnectCallback(nullptr)
-    , mReceiveCallback(nullptr)
-    , mContext(nullptr)
     , mTlvMode(0)
     , mReceivedMessage(nullptr)
     , mSentMessage(nullptr)
@@ -67,11 +64,9 @@ Error BleSecure::Start(ConnectCallback aConnectHandler, ReceiveCallback aReceive
 {
     Error error = kErrorNone;
 
-    mConnectCallback = aConnectHandler;
-    mReceiveCallback = aReceiveHandler;
-    mTlvMode         = aTlvMode;
-    mContext         = aContext;
-
+    mConnectCallback.Set(aConnectHandler, aContext);
+    mReceiveCallback.Set(aReceiveHandler, aContext);
+    mTlvMode = aTlvMode;
     mMtuSize = kInitialMtuSize;
 
     SuccessOrExit(error = otPlatBleEnable(&GetInstance()));
@@ -83,13 +78,12 @@ exit:
     return error;
 }
 
-Error BleSecure::TcatStart(const char                      *aElevationPsk,
-                           MeshCoP::TcatAgent::VendorInfo  *aVendorInfo,
-                           MeshCoP::TcatAgent::JoinCallback aHandler)
+Error BleSecure::TcatStart(MeshCoP::TcatAgent::VendorInfo  *aVendorInfo,
+                           MeshCoP::TcatAgent::JoinCallback aJoinHandler)
 {
-    return mTcatAgent.Start(aElevationPsk, aVendorInfo, aHandler);
+    return mTcatAgent.Start(aVendorInfo, mReceiveCallback.GetHandler(), aJoinHandler, mReceiveCallback.GetContext());
 }
-
+        
 void BleSecure::Stop(void)
 {
     otPlatBleGapAdvStop(&GetInstance());
@@ -103,9 +97,8 @@ void BleSecure::Stop(void)
 
     mTransmitQueue.DequeueAndFreeAll();
 
-    mConnectCallback = nullptr;
-    mReceiveCallback = nullptr;
-    mContext         = nullptr;
+    mConnectCallback.Clear();
+    mReceiveCallback.Clear();
 
     FreeMessage(mReceivedMessage);
     mReceivedMessage = nullptr;
@@ -173,7 +166,7 @@ Error BleSecure::SendApplicationTlv(uint8_t *aBuf, uint16_t aLength)
     {
         ot::ExtendedTlv tlv;
 
-        tlv.SetType(ot::MeshCoP::TcatAgent::TlvType::kApplication);
+        tlv.SetType(ot::MeshCoP::TcatAgent::TlvType::kSendApplicationData);
         tlv.SetLength(aLength);
         Send(reinterpret_cast<uint8_t *>(&tlv), sizeof(tlv));
     }
@@ -181,7 +174,7 @@ Error BleSecure::SendApplicationTlv(uint8_t *aBuf, uint16_t aLength)
     {
         ot::Tlv tlv;
 
-        tlv.SetType(ot::MeshCoP::TcatAgent::TlvType::kApplication);
+        tlv.SetType(ot::MeshCoP::TcatAgent::TlvType::kSendApplicationData);
         tlv.SetLength(aLength);
         Send(reinterpret_cast<uint8_t *>(&tlv), sizeof(tlv));
     }
@@ -235,10 +228,7 @@ Error BleSecure::HandleBleConnected(uint16_t aConnectionId)
 
     otPlatBleGattMtuGet(&GetInstance(), &mMtuSize);
 
-    if (mConnectCallback != nullptr)
-    {
-        mConnectCallback(IsConnected(), mBleConnectionOpen, mContext);
-    }
+    mConnectCallback.InvokeIfSet(IsConnected(), mBleConnectionOpen);
 
     return kErrorNone;
 }
@@ -250,9 +240,9 @@ Error BleSecure::HandleBleDisconnected(uint16_t aConnectionId)
     mBleConnectionOpen = false;
     mMtuSize           = kInitialMtuSize;
 
-    if (!IsConnected() && mConnectCallback != nullptr)
+    if (!IsConnected())
     {
-        mConnectCallback(false, mBleConnectionOpen, mContext);
+        mConnectCallback.InvokeIfSet(false, mBleConnectionOpen);
     }
 
     Disconnect(); // Stop TLS connection attempt from client if still running
@@ -287,10 +277,7 @@ void BleSecure::HandleTlsConnected(bool aConnected)
         mSentMessage = nullptr;
     }
 
-    if (mConnectCallback != nullptr)
-    {
-        mConnectCallback(aConnected, mBleConnectionOpen, mContext);
-    }
+    mConnectCallback.InvokeIfSet(aConnected, mBleConnectionOpen);
 }
 
 void BleSecure::HandleTlsReceive(void *aContext, uint8_t *aBuf, uint16_t aLength)
@@ -352,24 +339,24 @@ void BleSecure::HandleTlsReceive(uint8_t *aBuf, uint16_t aLength)
 
             // TLV fully loaded
 
-            if (mTcatAgent.IsEnabled() && mSentMessage != nullptr)
+            if (mTcatAgent.IsEnabled())
             {
                 if (mSentMessage != nullptr)
                 {
                     Error error = mTcatAgent.HandleSingleTlv(*mReceivedMessage, *mSentMessage, mTls);
                     Flush();
 
-                    if (error == kErrorNotTmf && mReceiveCallback != nullptr)
+                    if(error == kErrorAbort)
                     {
-                        mReceivedMessage->SetOffset(offset);
-                        mReceiveCallback(mReceivedMessage, mContext);
+                        Stop();
+                        goto exit;
                     }
                 }
             }
-            else if (mReceiveCallback != nullptr)
+            else
             {
                 mReceivedMessage->SetOffset(offset);
-                mReceiveCallback(mReceivedMessage, mContext);
+                mReceiveCallback.InvokeIfSet(mReceivedMessage, OT_TCAT_MESSAGE_TYPE_RAW, "");
             }
 
             SuccessOrExit(mReceivedMessage->SetLength(0)); // also sets the offset to 0
@@ -380,13 +367,9 @@ void BleSecure::HandleTlsReceive(uint8_t *aBuf, uint16_t aLength)
     {
         SuccessOrExit(mReceivedMessage->AppendBytes(aBuf, aLength));
 
-        if (mReceiveCallback != nullptr)
-        {
-            mReceiveCallback(mReceivedMessage, mContext);
-        }
-
+        mReceiveCallback.InvokeIfSet(mReceivedMessage, OT_TCAT_MESSAGE_TYPE_RAW, "");
         mReceivedMessage->SetLength(0);
-    }
+    }   
 
 exit:;
 }

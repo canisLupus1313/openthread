@@ -57,12 +57,11 @@ otError otBleSecureStart(otInstance              *aInstance,
 }
 
 otError otBleSecureTcatStart(otInstance       *aInstance,
-                             const char       *aElevationPsk,
                              otTcatVendorInfo *aVendorInfo,
                              otHandleTcatJoin  aHandler)
 {
     return AsCoreType(aInstance).GetApplicationBleSecure().TcatStart(
-        aElevationPsk, static_cast<MeshCoP::TcatAgent::VendorInfo *>(aVendorInfo), aHandler);
+        static_cast<MeshCoP::TcatAgent::VendorInfo *>(aVendorInfo), aHandler);
 }
 
 void otBleSecureStop(otInstance *aInstance) { AsCoreType(aInstance).GetApplicationBleSecure().Stop(); }
@@ -178,9 +177,14 @@ bool otBleSecureIsConnectionActive(otInstance *aInstance)
     return AsCoreType(aInstance).GetApplicationBleSecure().IsConnectionActive();
 }
 
-bool otBleSecureIsTcatElevated(otInstance *aInstance)
+bool otBleSecureIsPskdVerified(otInstance *aInstance)
 {
-    return AsCoreType(aInstance).GetApplicationBleSecure().IsTcatElevated();
+    return AsCoreType(aInstance).GetApplicationBleSecure().IsPskdVerified();
+}
+
+bool otBleSecureIsPskcVerified(otInstance *aInstance)
+{
+    return AsCoreType(aInstance).GetApplicationBleSecure().IsPskcVerified();
 }
 
 bool otBleSecureIsTcatEnabled(otInstance *aInstance)

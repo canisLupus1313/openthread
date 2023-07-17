@@ -38,9 +38,10 @@
 
 #if OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
 
-#include <openthread/ble_secure.h>
+#include <openthread/tcat.h>
 
 #include "common/as_core_type.hpp"
+#include "common/callback.hpp"
 #include "common/locator.hpp"
 #include "common/log.hpp"
 #include "common/message.hpp"
@@ -58,20 +59,20 @@ class TcatAgent : public InstanceLocator, private NonCopyable
 {
 public:
     /**
+     * This function pointer is called when application data was received over the TLS connection.
+     *
+     *  Please see otHandleTcatApplicationDataReceive for details.
+     *
+     */
+    typedef otHandleTcatApplicationDataReceive AppDataReceiveCallback;
+
+    /**
      * This function pointer is called to notify the completion of a join operation.
      *
      * Please see otHandleTcatJoin for details.
      *
      */
     typedef otHandleTcatJoin JoinCallback;
-
-    /**
-     * This structure represents a TCAT elevation PSK.
-     *
-     * Please see otTcatElevationPsk for details.
-     *
-     */
-    typedef otTcatElevationPsk ElevationPsk;
 
     /**
      * This structure represents the TCAT vendor information.
@@ -95,14 +96,52 @@ public:
      */
     enum TlvType : uint8_t
     {
-        kCommand       = OT_TCAT_TLV_COMMAND,        ///< Command TLV
-        kResponse      = OT_TCAT_TLV_RESPONSE,       ///< Response TLV
-        kActiveDataset = OT_TCAT_TLV_ACTIVE_DATASET, ///< Active Dataset TLV
-        kApplication   = OT_TCAT_TLV_APPLICATION,    ///< Application TLV
+        // Command Class General
+        kCommand                        = OT_TCAT_TLV_COMMAND,                          ///< TCAT command TLV   -->  !!!! OBSOLETE!!!!
+        kResponseWithStatus             = OT_TCAT_TLV_RESPONSE_WITH_STATUS,             ///< TCAT response with status value TLV
+        kResponseWithPayload            = OT_TCAT_TLV_RESPONSE_WITH_PAYLOAD,            ///< TCAT response with payload TLV
+        kResponseEvent                  = OT_TCAT_TLV_RESPONSE_EVENT,                   ///< TCAT response event TLV (reserved)
+        kGetNetworkName                 = OT_TCAT_TLV_GET_NETWORK_NAME,                 ///< TCAT network name query TLV
+        kDisconnect                     = OT_TCAT_TLV_DISCONNECT,                       ///< TCAT disconnect request TLV
+        kPing                           = OT_TCAT_TLV_PING,                             ///< TCAT ping request TLV
+        kGetDeviceId                    = OT_TCAT_TLV_GET_DEVICE_ID,                    ///< TCAT device ID query TLV
+        kGetExtendedPanID               = OT_TCAT_TLV_GET_EXTENDED_PAN_ID,              ///< TCAT extended PAN ID query TLV
+        kPresentPskdHash                = OT_TCAT_TLV_PRESENT_PSKD_HASH,                ///< TCAT commissioner rights elevation request TLV using PSKd hash
+        kPresentPskcHash                = OT_TCAT_TLV_PRESENT_PSKC_HASH,                ///< TCAT commissioner rights elevation request TLV using PSKc hash
+        kPresentInstallCodeHash         = OT_TCAT_TLV_PRESENT_INSTALL_CODE_HASH,        ///< TCAT commissioner rights elevation request TLV using install code
+        kRequestRandomNumChallenge      = OT_TCAT_TLV_REQUEST_RANDOM_NUM_CHALLENGE,     ///< TCAT random number challenge query TLV
+        kRequestPskdHash                = OT_TCAT_TLV_REQUEST_PSKD_HASH,                ///< TCAT PSKd hash request TLV
+
+        // Command Class Commissioning
+        kSetActiveOperationalDataset    = OT_TCAT_TLV_SET_ACTIVE_OPERATIONAL_DATASET,   ///< TCAT active operational dataset TLV
+        kSetActiveOperationalDataset1   = OT_TCAT_TLV_SET_ACTIVE_OPERATIONAL_DATASET1,  ///< TCAT active operational dataset alterative #1 TLV
+        kGetProvissioningTlvs           = OT_TCAT_TLV_GET_PROVISIONING_TLVS,            ///< TCAT provisioning TLVs query TLV
+        kGetCommissionerCertificate     = OT_TCAT_TLV_GET_COMMISSIONER_CERTIFICATE,     ///< TCAT commissioner certificate query TLV
+        kGetDiagnosticTlvs              = OT_TCAT_TLV_GET_DIAGNOSTIC_TLVS,              ///< TCAT diagnostics TLVs query TLV
+        kStartThreadInterface           = OT_TCAT_TLV_START_THREAD_INTERFACE,           ///< TCAT start thread interface request TLV
+        kStopThreadInterface            = OT_TCAT_TLV_STOP_THREAD_INTERFACE,            ///< TCAT stop thread interface request TLV
+
+        // Command Class Extraction
+        kGetActiveOperationalDataset    = OT_TCAT_TLV_GET_ACTIVE_OPERATIONAL_DATASET,   ///< TCAT active oerational dataset query TLV
+        kGetActiveOperationalDataset1   = OT_TCAT_TLV_GET_ACTIVE_OPERATIONAL_DATASET1,  ///< TCAT active oerational dataset alterative #1 query TLV
+
+        // Command Class Decommissioning
+        kDecommission                   = OT_TCAT_TLV_DECOMMISSION,                     ///< TCAT decommission request TLV
+
+        // Command Class Application
+        kSelectApplicationLayerUdp      = OT_TCAT_TLV_SELECT_APPLICATION_LAYER_UDP,     ///< TCAT select UDP protocol application layer request TLV
+        kSelectApplicationLayerTcp      = OT_TCAT_TLV_SELECT_APPLICATION_LAYER_TCP,     ///< TCAT select TCP protocol application layer request TLV
+        kSendApplicationData            = OT_TCAT_TLV_SEND_APPLICATION_DATA,            ///< TCAT send application data TLV
+        kSendVendorSpecificData         = OT_TCAT_TLV_SEND_VENDOR_SPECIFIC_DATA,        ///< TCAT send vendor specific command or data TLV
+
+        // Command Class CCM
+        kSetLDevIdOperationalCert       = OT_TCAT_TLV_SET_LDEVID_OPERATIONAL_CERT,      ///< TCAT LDevID operational certificate TLV
+        kSetLDevIdPrivateKey            = OT_TCAT_TLV_SET_LDEVID_PRIVATE_KEY,           ///< TCAT LDevID operational certificate pricate key TLV
+        kSetDomainCaCert                = OT_TCAT_TLV_SET_DOMAIN_CA_CERT,               ///< TCAT domain CA certificate TLV
     };
 
     /**
-     * TCAT Command Types.
+     * TCAT Command Types.   --> OBSOLTE
      *
      */
     enum CommandType : uint8_t
@@ -116,11 +155,17 @@ public:
      * TCAT Response Types.
      *
      */
-    enum ResponseType : uint8_t
+    enum StatusCode: uint8_t
     {
-        kSuccess      = OT_TCAT_RESPONSE_SUCCESS,       ///< Success
-        kInvalidState = OT_TCAT_RESPONSE_INVALID_STATE, ///< Invalid State
-        kParseError   = OT_TCAT_RESPONSE_PARSE_ERROR,   ///< Invalid State
+        kSuccess      = OT_TCAT_STATUS_SUCCESS,         ///< Command or request was successfully processed
+        kUnsupported  = OT_TCAT_STATUS_UNSUPPORTED,     ///< Requested command or received TLV is not supported
+        kParseError   = OT_TCAT_STATUS_PARSE_ERROR,     ///< Request / command could not be parsed correctly
+        kValueError   = OT_TCAT_STATUS_VALUE_ERROR,     ///< The value of the transmitted TLV has an error
+        kGeneralError = OT_TCAT_STATUS_GENERAL_ERROR,   ///< An error not matching any other category occurred
+        kBusy         = OT_TCAT_STATUS_BUSY,            ///< Command cannot be executed because the resource is busy
+        kUndefined    = OT_TCAT_STATUS_UNDEFINED,       ///< The requested value, data or service is not defined (currently) or not present
+        kHashError    = OT_TCAT_STATUS_HASH_ERROR,      ///< The hash value presented by the commissioner was incorrect
+        kUnauthorized = OT_TCAT_STATUS_UNAUTHORIZED,    ///< Sender does not have sufficient authorization for the given command
     };
 
     /**
@@ -135,10 +180,10 @@ public:
      * Enables the TCAT protocol.
      *
      * @retval kErrorNone           Successfully started the TCAT agent.
-     * @retval kErrorInvalidArgs    The aElevationPsk or the aVendorInfo is invalid.
+     * @retval kErrorInvalidArgs    The aJoinerPsk or the aVendorInfo is invalid.
      *
      */
-    Error Start(const char *aElevationPsk, VendorInfo *aVendorInfo, JoinCallback aHandler);
+    Error Start(VendorInfo *aVendorInfo, AppDataReceiveCallback aAppDataReceiveCallback, JoinCallback aHandler, void* aContext);
 
     /**
      * This method stops the TCAT protocol.
@@ -156,13 +201,22 @@ public:
     bool IsEnabled(void) const { return mEnabled; }
 
     /**
-     * This method indicates whether or not the TCAT session has elevated rights.
+     * This method indicates whether or not the TCAT session has verified the commissioner is in possesion of PSKd.
      *
-     * @retval TRUE   The TCAT session has elevated rights.
-     * @retval FALSE  The TCAT session does not have elevated rights.
+     * @retval TRUE   The TCAT session has verified PSKd.
+     * @retval FALSE  The TCAT session does not verified PSKd.
      *
      */
-    bool IsElevated(void) const { return mElevated; }
+    bool IsPskdVerified(void) const { return mPskdVerified; }
+
+    /**
+     * This method indicates whether or not the TCAT session has verified the commissioner is in possesion of PSKc.
+     *
+     * @retval TRUE   The TCAT session has verified PSKc.
+     * @retval FALSE  The TCAT session does not verified PSKc.
+     *
+     */
+    bool IsPskcVerified(void) const { return mPskcVerified; }
 
     /**
      * This method processes an incoming TCAT TLV.
@@ -170,7 +224,7 @@ public:
      * @retval kErrorNone           Successfully processed.
      * @retval kErrorInvalidArgs    The invalid argument value.
      * @retval kErrorParse          The incoming meassge could not be parsed.
-     * @retval kErrorNotTmf         The incoming message was an application TLV.
+     * @retval kErrorAbort          The incoming message was a request for terminating the TCAT link.
      *
      */
     Error HandleSingleTlv(ot::Message &aIncommingMessage, ot::Message &aOutgoingMessage, MeshCoP::Dtls &aTlsContext);
@@ -184,11 +238,13 @@ private:
 
     static constexpr uint16_t kJoinerUdpPort = OPENTHREAD_CONFIG_JOINER_UDP_PORT;
 
-    ElevationPsk mElevationPsk;
-    VendorInfo  *mVendorInfo;
-    JoinCallback mJoinCallback;
-    bool         mEnabled;
-    bool         mElevated;
+    JoinerPskd                        mJoinerPskd;
+    VendorInfo*                       mVendorInfo;   
+    Callback<JoinCallback>            mJoinCallback;
+    Callback<AppDataReceiveCallback>  mAppDataReceiveCallback; 
+    bool                              mEnabled : 1;
+    bool                              mPskdVerified : 1;
+    bool                              mPskcVerified : 1;
 };
 
 } // namespace MeshCoP
