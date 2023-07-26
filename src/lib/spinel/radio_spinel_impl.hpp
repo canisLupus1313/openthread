@@ -252,14 +252,20 @@ template <typename InterfaceType> void RadioSpinel<InterfaceType>::ResetRcp(bool
     mIsReady    = false;
     mWaitingKey = SPINEL_PROP_LAST_STATUS;
 
-    if (aResetRadio && (SendReset(SPINEL_RESET_STACK) == OT_ERROR_NONE) && (WaitResponse(false) == OT_ERROR_NONE))
+    if (aResetRadio && SendReset(SPINEL_RESET_STACK) == OT_ERROR_NONE && WaitResponse(false) == OT_ERROR_NONE)
     {
+        mError = OT_ERROR_NONE;
+
         otLogInfoPlat("Software reset RCP successfully");
         ExitNow(resetDone = true);
     }
 
     hardwareReset = (mSpinelInterface.HardwareReset() == OT_ERROR_NONE);
-    SuccessOrExit(WaitResponse(false));
+
+    if (hardwareReset)
+    {
+        SuccessOrExit(WaitResponse(false));
+    }
 
     resetDone = true;
 
