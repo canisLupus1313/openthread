@@ -33,6 +33,7 @@
 
 #include "tcat_agent.hpp"
 #include "common/code_utils.hpp"
+#include "crypto/storage.hpp"
 
 #if OPENTHREAD_CONFIG_BLE_TCAT_ENABLE
 
@@ -767,13 +768,27 @@ void TcatAgent::CalculateHash(uint64_t aChallenge, const char *aBuf, size_t aBuf
     const mbedtls_asn1_buf &rawKey = Get<Ble::BleSecure>().GetOwnPublicKey();
     Crypto::Key             cryptoKey;
     Crypto::HmacSha256      hmac;
+    Crypto::Storage::KeyRef keyRef;
 
+    SuccessOrExit(Crypto::Storage::ImportKey(keyRef, Crypto::Storage::kKeyTypeHmac,
+                                             Crypto::Storage::kKeyAlgorithmHmacSha256, Crypto::Storage::kUsageSignHash,
+                                             Crypto::Storage::kTypeVolatile, reinterpret_cast<const uint8_t *>(aBuf),
+                                             aBufLen));
+
+#if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
+    cryptoKey.SetAsKeyRef(keyRef);
+#else
     cryptoKey.Set(reinterpret_cast<const uint8_t *>(aBuf), static_cast<uint16_t>(aBufLen));
+#endif
 
     hmac.Start(cryptoKey);
     hmac.Update(aChallenge);
     hmac.Update(rawKey.p, static_cast<uint16_t>(rawKey.len));
     hmac.Finish(aHash);
+
+    Crypto::Storage::DestroyKey(keyRef);
+exit:
+    return;
 }
 
 Error TcatAgent::HandleStartThreadInterface(void)

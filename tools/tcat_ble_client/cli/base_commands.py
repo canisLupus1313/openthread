@@ -234,6 +234,7 @@ class GetPskdHash(Command):
             challenge_size = 8
             challenge = token_bytes(challenge_size)
             pskd = bytes(args[0], 'utf-8')
+            print(str(challenge))
             data = TLV(TcatTLVType.GET_PSKD_HASH.value, challenge).to_bytes()
             response = await bless.send_with_resp(data)
             if not response:
